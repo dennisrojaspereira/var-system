@@ -54,7 +54,7 @@ jobs:
       - name: Build da imagem base
         run: docker build -f docker/Dockerfile -t var-system:scan .
       - name: Trivy (CVEs na imagem)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: var-system:scan
           format: table

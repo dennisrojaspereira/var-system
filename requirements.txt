@@ -1,0 +1,15 @@
+# Core
+numpy>=1.26
+opencv-python>=4.9
+pyyaml>=6.0
+
+# Vision / AI
+ultralytics>=8.2          # YOLOv8 (modelo pre-treinado: yolov8n.pt)
+
+# API de suporte a decisao
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+
+# Event streaming (opcional - fallback para arquivo/console se ausente)
+# kafka-python>=2.0        # descomente para usar Kafka real

@@ -1,0 +1,14 @@
+# Artefatos de runtime
+buffer/
+events/
+samples/
+out.json
+
+# Pesos de modelos (baixados pela ultralytics)
+*.pt
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/

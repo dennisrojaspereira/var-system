@@ -1,0 +1,57 @@
+# Configuracao central do sistema VAR.
+# Todos os modulos leem deste arquivo via var.config.load_config().
+
+match:
+  id: "world-cup-final-2026"
+  name: "Final 2026"
+
+# Cameras de entrada. Cada camera tem um id, uma fonte e um angulo descritivo.
+# A fonte pode ser:
+#   - um caminho de arquivo .mp4
+#   - uma URL rtsp:// / srt:// / udp://
+#   - um indice de webcam (ex: "0")
+cameras:
+  - id: "cam-01"
+    angle: "tactical-wide"
+    source: "samples/cam01.mp4"
+    fps: 50
+  - id: "cam-07"
+    angle: "goal-line"
+    source: "samples/cam07.mp4"
+    fps: 50
+
+# Ingestao FFmpeg -> timeline HLS
+ingestion:
+  output_dir: "buffer"        # raiz do buffer de timeline (um subdir por camera)
+  hls_time: 2                 # duracao de cada segmento (segundos)
+  hls_list_size: 60           # quantos segmentos manter na playlist (janela deslizante)
+  video_codec: "libx264"
+  preset: "veryfast"
+  delete_segments: true       # janela deslizante: apaga segmentos antigos
+
+# Visao computacional
+vision:
+  model: "yolov8n.pt"         # pesos pre-treinados (baixados pela ultralytics no 1o uso)
+  device: "cpu"               # "cpu" ou "cuda" / "0"
+  conf_ball: 0.25             # confianca minima para a bola
+  conf_player: 0.30           # confianca minima para jogadores
+  # nomes COCO usados pelo yolov8n: "sports ball" e "person"
+  ball_class: "sports ball"
+  player_class: "person"
+
+# Sincronizacao de cameras
+sync:
+  mode: "wallclock"           # "wallclock" (relogio do sistema) ou "ptp" (simulado)
+  ptp_offset_ms: 0            # offset aplicado por camera (calibracao)
+
+# Event bus
+events:
+  backend: "auto"             # "auto" | "kafka" | "file" | "console"
+  kafka_bootstrap: "localhost:9092"
+  topic: "var.events"
+  file_sink: "events/var_events.jsonl"
+
+# API de suporte a decisao
+api:
+  host: "127.0.0.1"
+  port: 8000

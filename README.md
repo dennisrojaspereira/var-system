@@ -69,6 +69,53 @@ python -m var.cli ingest
 python -m var.cli timeline cam-07
 ```
 
+## Docker (stack completa com Kafka)
+
+Sobe Kafka (KRaft, sem Zookeeper), Kafka UI, a API de decisao e um consumer de
+eventos. O `EventBus` passa a usar Kafka via variaveis de ambiente
+(`VAR_EVENTS_BACKEND=kafka`, `VAR_KAFKA_BOOTSTRAP=kafka:9094`).
+
+```bash
+# 1. (opcional) gerar um video de amostra para a ingestao
+python -m var.cli sample --output samples/cam07.mp4
+
+# 2. subir kafka + kafka-ui + api + consumer
+docker compose up -d --build
+
+# 3. ver os servicos
+#    API de decisao .... http://localhost:8000/docs
+#    Kafka UI .......... http://localhost:8080
+
+# 4. disparar uma revisao -> evento publicado no Kafka, lido pelo consumer
+curl -X POST http://localhost:8000/review \
+  -H "content-type: application/json" \
+  -d '{"camera_id":"cam-07","t_seconds":12.5,"reason":"penalty-check"}'
+
+docker compose logs -f consumer      # ve o evento chegando via Kafka
+
+# 5. (opcional) ingestao FFmpeg ao vivo dentro do container
+docker compose --profile ingest up -d
+
+# 6. (opcional) imagem com YOLO/torch para o endpoint /analyze
+INSTALL_ML=true docker compose build api
+docker compose up -d api
+
+# encerrar
+docker compose down            # (use -v para limpar tambem o volume do Kafka)
+```
+
+| Servico    | Porta | Funcao                                   |
+| ---------- | ----- | ---------------------------------------- |
+| `kafka`    | 9092  | Broker (KRaft). Interno: `kafka:9094`    |
+| `kafka-ui` | 8080  | Observabilidade dos topicos/eventos      |
+| `api`      | 8000  | API de decisao (FastAPI)                 |
+| `consumer` | -     | Consome `var.events` (audit/broadcast)   |
+| `ingest`   | -     | Ingestao FFmpeg (profile `ingest`)       |
+
+> A imagem base nao inclui torch/ultralytics (pesados). O endpoint `/analyze` so
+> funciona na imagem ML (`INSTALL_ML=true`); os demais modulos rodam na base.
+> Variaveis de override: veja `var/config.py:_apply_env_overrides`.
+
 ## API (principais rotas)
 
 | Metodo | Rota                       | Descricao                                  |

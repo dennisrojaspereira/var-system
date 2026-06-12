@@ -1,0 +1,106 @@
+# Stack local do var-system.
+#
+#   docker compose up -d --build              # kafka + kafka-ui + api + consumer
+#   docker compose --profile ingest up -d     # + ingestao FFmpeg ao vivo
+#   docker compose --profile ml build         # imagem com YOLO/torch (endpoint /analyze)
+#
+# Servicos expostos no host:
+#   - API de decisao .... http://localhost:8000/docs
+#   - Kafka UI .......... http://localhost:8080
+
+name: var-system
+
+services:
+  # ---- Kafka (KRaft, sem Zookeeper) ----
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: var-kafka
+    ports:
+      - "9092:9092"   # acesso externo (host) via localhost:9092
+    environment:
+      - KAFKA_CFG_NODE_ID=0
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
+      - KAFKA_CFG_LISTENERS=INTERNAL://:9094,EXTERNAL://:9092,CONTROLLER://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=INTERNAL://kafka:9094,EXTERNAL://localhost:9092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=INTERNAL
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+      - ALLOW_PLAINTEXT_LISTENER=yes
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9094 --list || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    volumes:
+      - kafka-data:/bitnami/kafka
+
+  # ---- Kafka UI (observabilidade) ----
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: var-kafka-ui
+    ports:
+      - "8080:8080"
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=var
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9094
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  # ---- API de suporte a decisao (FastAPI) ----
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        INSTALL_ML: ${INSTALL_ML:-false}
+    image: var-system:latest
+    container_name: var-api
+    ports:
+      - "8000:8000"
+    environment:
+      - VAR_EVENTS_BACKEND=kafka
+      - VAR_KAFKA_BOOTSTRAP=kafka:9094
+      - VAR_API_HOST=0.0.0.0
+      - VAR_API_PORT=8000
+    volumes:
+      - ./samples:/app/samples
+      - ./buffer:/app/buffer
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  # ---- Consumer de eventos (auditoria/broadcast/analytics) ----
+  consumer:
+    image: var-system:latest
+    container_name: var-consumer
+    command: ["python", "-m", "var.events.consumer"]
+    environment:
+      - VAR_EVENTS_BACKEND=kafka
+      - VAR_KAFKA_BOOTSTRAP=kafka:9094
+    depends_on:
+      kafka:
+        condition: service_healthy
+      api:
+        condition: service_started
+
+  # ---- Ingestao FFmpeg ao vivo (opcional: profile 'ingest') ----
+  # Requer videos em ./samples (gere com: python -m var.cli sample).
+  ingest:
+    image: var-system:latest
+    container_name: var-ingest
+    profiles: ["ingest"]
+    command: ["python", "-m", "var.cli", "ingest"]
+    environment:
+      - VAR_INGESTION_OUTPUT_DIR=/app/buffer
+    volumes:
+      - ./samples:/app/samples
+      - ./buffer:/app/buffer
+    depends_on:
+      api:
+        condition: service_started
+
+volumes:
+  kafka-data:

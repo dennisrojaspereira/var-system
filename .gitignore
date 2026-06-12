@@ -1,7 +1,7 @@
-# Artefatos de runtime
-buffer/
-events/
-samples/
+# Artefatos de runtime (ancorados a raiz; nao afetam o pacote var/events)
+/buffer/
+/events/
+/samples/
 out.json
 
 # Pesos de modelos (baixados pela ultralytics)

@@ -1,6 +1,7 @@
 """Carregamento e acesso tipado da configuracao (config.yaml)."""
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -57,9 +58,33 @@ class Config:
 
 
 def load_config(path: str | Path | None = None) -> Config:
-    cfg_path = Path(path) if path else DEFAULT_CONFIG_PATH
+    # VAR_CONFIG permite trocar o arquivo (ex: montar outro no container).
+    cfg_path = Path(path or os.environ.get("VAR_CONFIG", DEFAULT_CONFIG_PATH))
     if not cfg_path.exists():
         raise FileNotFoundError(f"config.yaml nao encontrado em {cfg_path}")
     with cfg_path.open("r", encoding="utf-8") as fh:
         raw = yaml.safe_load(fh) or {}
+    _apply_env_overrides(raw)
     return Config(raw=raw, path=cfg_path)
+
+
+def _apply_env_overrides(raw: dict[str, Any]) -> None:
+    """Sobrescreve campos a partir de variaveis de ambiente (12-factor / Docker)."""
+    env = os.environ
+    overrides = {
+        "VAR_EVENTS_BACKEND": ("events", "backend"),
+        "VAR_KAFKA_BOOTSTRAP": ("events", "kafka_bootstrap"),
+        "VAR_EVENTS_TOPIC": ("events", "topic"),
+        "VAR_EVENTS_FILE_SINK": ("events", "file_sink"),
+        "VAR_API_HOST": ("api", "host"),
+        "VAR_API_PORT": ("api", "port"),
+        "VAR_INGESTION_OUTPUT_DIR": ("ingestion", "output_dir"),
+        "VAR_VISION_MODEL": ("vision", "model"),
+        "VAR_VISION_DEVICE": ("vision", "device"),
+    }
+    for var, (section, key) in overrides.items():
+        value = env.get(var)
+        if value is None:
+            continue
+        raw.setdefault(section, {})
+        raw[section][key] = int(value) if key == "port" else value

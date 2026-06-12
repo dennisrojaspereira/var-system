@@ -11,5 +11,5 @@ fastapi>=0.110
 uvicorn[standard]>=0.29
 pydantic>=2.6
 
-# Event streaming (opcional - fallback para arquivo/console se ausente)
-# kafka-python>=2.0        # descomente para usar Kafka real
+# Event streaming (fallback para arquivo/console se o broker estiver ausente)
+kafka-python>=2.0

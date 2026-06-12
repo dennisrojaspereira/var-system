@@ -1,0 +1,12 @@
+#!/bin/sh
+# Roda a suite de regressao antes de cada commit.
+# Ativacao (uma vez por clone): git config core.hooksPath .githooks
+echo "[pre-commit] rodando testes de regressao..."
+python -m pytest tests/ -q
+status=$?
+if [ $status -ne 0 ]; then
+  echo "[pre-commit] testes falharam - commit abortado."
+  echo "[pre-commit] para pular em emergencia: git commit --no-verify"
+  exit $status
+fi
+echo "[pre-commit] testes OK."

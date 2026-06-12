@@ -155,11 +155,20 @@ banco, em disco/S3):
 ## Testes
 
 ```bash
-python tests/test_tracker.py
-python tests/test_buffer_sync.py
-# ou, com pytest instalado:
-python -m pytest tests/
+python -m pytest tests/        # suite completa (tracker, buffer, sync, storage)
 ```
+
+Os testes de regressao rodam automaticamente em dois pontos:
+
+1. **A cada commit (local)** — hook `pre-commit` em `.githooks/`. Ative uma vez
+   por clone com:
+   ```bash
+   git config core.hooksPath .githooks
+   ```
+   Se a suite falhar, o commit e abortado (`--no-verify` pula em emergencia).
+2. **A cada push/PR (GitHub Actions)** — `.github/workflows/ci.yml` roda a
+   suite com TimescaleDB real (o teste de integracao executa de verdade),
+   smoke test da CLI e build da imagem Docker.
 
 ## Configuracao
 

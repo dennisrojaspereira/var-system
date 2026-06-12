@@ -38,7 +38,6 @@ def main() -> int:
                 auto_offset_reset="earliest",
                 group_id="var-event-sink",
                 value_deserializer=lambda v: v.decode("utf-8"),
-                api_version_auto_timeout_ms=5000,
             )
         except Exception as exc:
             print(f"[event_sink] aguardando Kafka ({exc})...")

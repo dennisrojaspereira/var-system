@@ -73,7 +73,6 @@ class EventBus:
                 bootstrap_servers=self.bootstrap,
                 value_serializer=lambda v: v.encode("utf-8"),
                 request_timeout_ms=3000,
-                api_version_auto_timeout_ms=3000,
             )
         except Exception:
             return None

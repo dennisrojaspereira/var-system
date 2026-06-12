@@ -28,8 +28,6 @@ def _run_kafka(bootstrap: str, topic: str) -> bool:
             auto_offset_reset="earliest",
             group_id="var-consumer-demo",
             value_deserializer=lambda v: v.decode("utf-8"),
-            consumer_timeout_ms=0,
-            api_version_auto_timeout_ms=5000,
         )
     except Exception as exc:
         print(f"[consumer] Kafka indisponivel ({exc}); usando file tail.")
@@ -62,7 +60,7 @@ def _print_event(raw: str) -> None:
         return
     print(f"  <- {evt.get('event_type'):24} "
           f"cam={evt.get('camera_id')} "
-          f"payload={evt.get('payload')}")
+          f"payload={evt.get('payload')}", flush=True)
 
 
 def main() -> int:

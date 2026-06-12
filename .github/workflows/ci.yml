@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  tests:
+    name: Testes de regressao
+    runs-on: ubuntu-latest
+
+    # TimescaleDB real: faz o teste de integracao do storage rodar de verdade.
+    services:
+      db:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: var
+          POSTGRES_PASSWORD: var
+          POSTGRES_DB: var
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U var -d var"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # Dependencias leves: os testes nao precisam de torch/ultralytics.
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install \
+            "numpy>=1.26" \
+            "opencv-python-headless>=4.9" \
+            "pyyaml>=6.0" \
+            "fastapi>=0.110" \
+            "pydantic>=2.6" \
+            "httpx" \
+            "kafka-python>=2.0" \
+            "psycopg[binary]>=3.2" \
+            "pytest>=8.0"
+
+      - name: Rodar suite de testes
+        env:
+          VAR_DB_DSN: postgresql://var:var@localhost:5432/var
+        run: python -m pytest tests/ -v
+
+      - name: Smoke test da CLI (video sintetico + extracao de frames)
+        run: |
+          python -m var.cli sample --output samples/cam07.mp4 --seconds 2
+          python - <<'EOF'
+          from var.vision.frame_extractor import FrameExtractor
+          frames = list(FrameExtractor("samples/cam07.mp4", step=10))
+          assert len(frames) > 0, "nenhum frame extraido"
+          print(f"OK: {len(frames)} frames extraidos {frames[0].shape}")
+          EOF
+
+  docker:
+    name: Build da imagem e validacao do compose
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validar docker-compose
+        run: docker compose config --quiet
+
+      - name: Build da imagem (base, sem ML)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: false
+          tags: var-system:ci

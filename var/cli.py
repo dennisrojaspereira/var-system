@@ -88,9 +88,17 @@ def cmd_api(args) -> int:
     from .api import create_app
     config = load_config()
     api_cfg = config.section("api")
+    host = api_cfg.get("host", "127.0.0.1")
+    port = int(api_cfg.get("port", 8000))
     app = create_app(config)
-    uvicorn.run(app, host=api_cfg.get("host", "127.0.0.1"),
-                port=int(api_cfg.get("port", 8000)))
+    if getattr(args, "open", False):
+        import threading
+        import webbrowser
+        browse_host = "127.0.0.1" if host == "0.0.0.0" else host
+        url = f"http://{browse_host}:{port}/viewer"
+        threading.Timer(1.5, webbrowser.open, args=(url,)).start()
+        print(f"Abrindo viewer em {url} ...")
+    uvicorn.run(app, host=host, port=port)
     return 0
 
 
@@ -124,7 +132,10 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("t", type=float)
     ps.set_defaults(func=cmd_sync)
 
-    sub.add_parser("api", help="sobe a API de decisao").set_defaults(func=cmd_api)
+    papi = sub.add_parser("api", help="sobe a API de decisao")
+    papi.add_argument("--open", action="store_true",
+                      help="abre o navegador no /viewer ao subir")
+    papi.set_defaults(func=cmd_api)
 
     psa = sub.add_parser("sample", help="gera video sintetico de teste")
     psa.add_argument("--output", default="samples/cam07.mp4")

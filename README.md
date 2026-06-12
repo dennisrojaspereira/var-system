@@ -53,14 +53,17 @@ python -m pip install -r requirements.txt
 python -m var.cli sample --output samples/cam07.mp4
 
 # 2. Rodar visao computacional: deteccao + tracking + contatos
-python -m var.cli analyze samples/cam07.mp4 --step 2 --json out.json
+#    --render gera um video anotado (caixa na bola, trilha, contatos)
+python -m var.cli analyze samples/cam07.mp4 --step 2 --json out.json \
+  --render samples/cam07_annotated.mp4
 
 # 3. Alinhar um instante entre dois angulos (sincronizacao)
 python -m var.cli sync cam-01 cam-07 12.5
 
-# 4. Subir a API de decisao
-python -m var.cli api
-# -> http://127.0.0.1:8000/docs
+# 4. Subir a API de decisao (--open ja abre o viewer no navegador)
+python -m var.cli api --open
+# -> http://127.0.0.1:8000/viewer  (videos anotados)
+# -> http://127.0.0.1:8000/docs    (Swagger)
 
 # 5. Ingestao ao vivo (requer FFmpeg + fontes em config.yaml)
 python -m var.cli ingest
@@ -151,6 +154,31 @@ banco, em disco/S3):
 | GET    | `/sync/align?source=&target=&t=` | Mapeia instante entre angulos        |
 | POST   | `/review`                  | Inicia revisao (publica evento)            |
 | POST   | `/analyze`                 | Roda YOLO+tracking, retorna trajetoria     |
+| GET    | `/viewer`                  | Pagina web para assistir os videos anotados |
+| GET    | `/videos`                  | Lista os videos disponiveis em `samples/`  |
+| GET    | `/videos/{nome}`           | Serve um video (player do viewer)          |
+
+## Viewer: ver a deteccao funcionando
+
+O **VAR Review Room** (`/viewer`) mostra o resultado da visao computacional no
+navegador: caixa amarela na bola (YOLO), caixas cianas nos jogadores, trilha
+verde da trajetoria e circulo vermelho nos contatos detectados.
+
+```bash
+# 1. gerar amostra + rodar YOLO gravando o video anotado
+python -m var.cli sample --output samples/cam07.mp4
+python -m var.cli analyze samples/cam07.mp4 --step 2 \
+  --render samples/cam07_annotated.mp4
+
+# 2. subir a API e abrir o viewer automaticamente
+python -m var.cli api --open
+# -> http://127.0.0.1:8000/viewer
+```
+
+Com o stack Docker rodando (`docker compose up -d`), o viewer fica em
+http://localhost:8000/viewer — qualquer `.mp4` colocado em `samples/` aparece
+na lista. Dica: o player do navegador exige H.264; se o video nao tocar,
+transcodifique com `ffmpeg -i in.mp4 -c:v libx264 -pix_fmt yuv420p out.mp4`.
 
 ## Testes
 

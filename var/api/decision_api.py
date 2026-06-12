@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from ..buffer import TimelineBuffer
 from ..config import Config, load_config
 from ..events import EventBus, make_event
+from ..storage import Storage
 from ..sync import SyncManager
 
 
@@ -40,13 +41,15 @@ class ReviewRequest(BaseModel):
 class AnalyzeRequest(BaseModel):
     video_path: str
     step: int = 3  # subamostragem padrao p/ velocidade
+    camera_id: str | None = None  # usada para timestamp absoluto/persistencia
 
 
-def create_app(config: Config | None = None) -> FastAPI:
+def create_app(config: Config | None = None, storage: Storage | None = None) -> FastAPI:
     config = config or load_config()
     app = FastAPI(title="VAR Decision Support API", version="0.1.0")
     bus = EventBus(config)
     sync = SyncManager(config)
+    storage = storage or Storage(config)
 
     @app.get("/health")
     def health() -> dict[str, Any]:
@@ -54,6 +57,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             "status": "ok",
             "match": config.match,
             "event_backend": bus.backend_in_use,
+            "database": storage.available(),
             "cameras": [c.id for c in config.cameras],
         }
 
@@ -120,17 +124,66 @@ def create_app(config: Config | None = None) -> FastAPI:
         path = config.resolve(req.video_path)
         if not Path(path).exists():
             raise HTTPException(404, f"Video nao encontrado: {path}")
+        camera_id = req.camera_id or config.cameras[0].id
+        _require_camera(config, camera_id)
         # Import tardio: ultralytics/torch sao pesados.
         from ..vision import analyze_video
         result = analyze_video(path, config=config, step=req.step)
         traj = result.trajectory
         for contact in traj.contacts:
             bus.publish(make_event(
-                "BALL_CONTACT_DETECTED", config,
+                "BALL_CONTACT_DETECTED", config, camera_id=camera_id,
                 frame=contact.frame, t_seconds=contact.timestamp,
                 x=contact.x, y=contact.y,
                 direction_change_deg=contact.direction_change_deg,
             ))
-        return result.to_dict()
+        persisted = _persist_trajectory(config, storage, sync, camera_id, traj)
+        out = result.to_dict()
+        out["persisted_detections"] = persisted
+        return out
+
+    @app.get("/trajectory/{camera_id}")
+    def stored_trajectory(camera_id: str, t0: str, t1: str) -> dict[str, Any]:
+        """Consulta a trajetoria persistida (t0/t1 em ISO-8601 UTC).
+        Sempre escopada por match_id + camera_id - o padrao de acesso que
+        mantem as queries num unico shard quando distribuido (Citus)."""
+        _require_camera(config, camera_id)
+        if not storage.available():
+            raise HTTPException(503, "Banco de dados indisponivel")
+        from datetime import datetime
+        match_id = config.match.get("id", "unknown-match")
+        points = storage.trajectory(
+            match_id, camera_id,
+            datetime.fromisoformat(t0), datetime.fromisoformat(t1),
+        )
+        for p in points:
+            p["time"] = p["time"].isoformat() if hasattr(p["time"], "isoformat") else p["time"]
+        return {"match_id": match_id, "camera_id": camera_id, "points": points}
 
     return app
+
+
+def _persist_trajectory(config: Config, storage: Storage, sync: SyncManager,
+                        camera_id: str, traj) -> int:
+    """Grava os pontos da bola em detections. Retorna quantos persistiu (0 se
+    o banco estiver desligado/indisponivel - a analise nunca falha por isso)."""
+    if not config.section("storage").get("persist_detections", True):
+        return 0
+    if not storage.available():
+        return 0
+    try:
+        match = config.match
+        match_id = match.get("id", "unknown-match")
+        storage.ensure_schema()
+        storage.upsert_match(match_id, match.get("name", match_id))
+        cam = config.camera(camera_id)
+        storage.upsert_camera(match_id, cam.id, cam.angle, cam.fps)
+        rows = [
+            (sync.absolute_at(camera_id, p.timestamp), match_id, camera_id,
+             p.frame, "sports ball", p.confidence, p.x, p.y)
+            for p in traj.points
+        ]
+        return storage.insert_detections(rows)
+    except Exception as exc:
+        print(f"[api] persistencia falhou (analise segue valida): {exc}")
+        return 0

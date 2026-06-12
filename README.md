@@ -104,17 +104,41 @@ docker compose up -d api
 docker compose down            # (use -v para limpar tambem o volume do Kafka)
 ```
 
-| Servico    | Porta | Funcao                                   |
-| ---------- | ----- | ---------------------------------------- |
-| `kafka`    | 9092  | Broker (KRaft). Interno: `kafka:9094`    |
-| `kafka-ui` | 8080  | Observabilidade dos topicos/eventos      |
-| `api`      | 8000  | API de decisao (FastAPI)                 |
-| `consumer` | -     | Consome `var.events` (audit/broadcast)   |
-| `ingest`   | -     | Ingestao FFmpeg (profile `ingest`)       |
+| Servico       | Porta | Funcao                                       |
+| ------------- | ----- | -------------------------------------------- |
+| `kafka`       | 9092  | Broker (KRaft). Interno: `kafka:9094`        |
+| `kafka-ui`    | 8080  | Observabilidade dos topicos/eventos          |
+| `db`          | 5432  | PostgreSQL + TimescaleDB (`var`/`var`)       |
+| `api`         | 8000  | API de decisao (FastAPI)                     |
+| `consumer`    | -     | Consome `var.events` (audit/broadcast)       |
+| `events-sink` | -     | Kafka -> Postgres (tabela `var_events`)      |
+| `ingest`      | -     | Ingestao FFmpeg (profile `ingest`)           |
 
 > A imagem base nao inclui torch/ultralytics (pesados). O endpoint `/analyze` so
 > funciona na imagem ML (`INSTALL_ML=true`); os demais modulos rodam na base.
 > Variaveis de override: veja `var/config.py:_apply_env_overrides`.
+
+## Persistencia (PostgreSQL + TimescaleDB)
+
+O modulo `var/storage/` persiste tres cargas distintas (videos ficam fora do
+banco, em disco/S3):
+
+| Tabela       | Conteudo                            | Tipo                       |
+| ------------ | ----------------------------------- | -------------------------- |
+| `matches`    | Partidas                            | Relacional                 |
+| `cameras`    | Cameras por partida                 | Relacional                 |
+| `detections` | Posicoes da bola/jogadores (YOLO)   | **Hypertable** Timescale   |
+| `var_events` | Auditoria de eventos (sink Kafka)   | Append-only                |
+
+- `dsn` vazio em `config.yaml` desliga a persistencia (a analise nunca falha
+  por banco indisponivel). Override: `VAR_DB_DSN`.
+- O `/analyze` grava a trajetoria da bola em `detections`; consulte via
+  `GET /trajectory/{cam}?t0=...&t1=...` (ISO-8601).
+- **Sharding**: o schema e Citus-ready - todas as tabelas de volume carregam
+  `match_id`, a chave de distribuicao natural. Cada partida vive inteira num
+  shard, e as queries de revisao (sempre escopadas por partida) nunca cruzam
+  shards. Num unico Postgres, o particionamento por tempo do TimescaleDB ja
+  cobre o crescimento; migre para Citus apenas em escala multi-torneio.
 
 ## API (principais rotas)
 

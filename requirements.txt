@@ -13,3 +13,6 @@ pydantic>=2.6
 
 # Event streaming (fallback para arquivo/console se o broker estiver ausente)
 kafka-python>=2.0
+
+# Persistencia (PostgreSQL + TimescaleDB; opcional - dsn vazio desliga)
+psycopg[binary]>=3.2

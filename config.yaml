@@ -51,6 +51,11 @@ events:
   topic: "var.events"
   file_sink: "events/var_events.jsonl"
 
+# Persistencia (PostgreSQL + TimescaleDB). dsn vazio = persistencia desligada.
+storage:
+  dsn: ""                     # ex: "postgresql://var:var@localhost:5432/var"
+  persist_detections: true    # /analyze grava a trajetoria em detections
+
 # API de suporte a decisao
 api:
   host: "127.0.0.1"

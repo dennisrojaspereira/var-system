@@ -78,6 +78,7 @@ def _apply_env_overrides(raw: dict[str, Any]) -> None:
         "VAR_EVENTS_FILE_SINK": ("events", "file_sink"),
         "VAR_API_HOST": ("api", "host"),
         "VAR_API_PORT": ("api", "port"),
+        "VAR_DB_DSN": ("storage", "dsn"),
         "VAR_INGESTION_OUTPUT_DIR": ("ingestion", "output_dir"),
         "VAR_VISION_MODEL": ("vision", "model"),
         "VAR_VISION_DEVICE": ("vision", "device"),

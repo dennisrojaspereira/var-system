@@ -49,6 +49,25 @@ services:
       kafka:
         condition: service_healthy
 
+  # ---- PostgreSQL + TimescaleDB (deteccoes, eventos, partidas) ----
+  db:
+    image: timescale/timescaledb:latest-pg16
+    container_name: var-db
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=var
+      - POSTGRES_PASSWORD=var
+      - POSTGRES_DB=var
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./var/storage/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U var -d var"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
   # ---- API de suporte a decisao (FastAPI) ----
   api:
     build:
@@ -65,11 +84,14 @@ services:
       - VAR_KAFKA_BOOTSTRAP=kafka:9094
       - VAR_API_HOST=0.0.0.0
       - VAR_API_PORT=8000
+      - VAR_DB_DSN=postgresql://var:var@db:5432/var
     volumes:
       - ./samples:/app/samples
       - ./buffer:/app/buffer
     depends_on:
       kafka:
+        condition: service_healthy
+      db:
         condition: service_healthy
 
   # ---- Consumer de eventos (auditoria/broadcast/analytics) ----
@@ -82,6 +104,23 @@ services:
       - VAR_KAFKA_BOOTSTRAP=kafka:9094
     depends_on:
       kafka:
+        condition: service_healthy
+      api:
+        condition: service_started
+
+  # ---- Sink de eventos: Kafka -> Postgres (tabela var_events) ----
+  events-sink:
+    image: var-system:latest
+    container_name: var-events-sink
+    command: ["python", "-m", "var.storage.event_sink"]
+    environment:
+      - VAR_EVENTS_BACKEND=kafka
+      - VAR_KAFKA_BOOTSTRAP=kafka:9094
+      - VAR_DB_DSN=postgresql://var:var@db:5432/var
+    depends_on:
+      kafka:
+        condition: service_healthy
+      db:
         condition: service_healthy
       api:
         condition: service_started
@@ -104,3 +143,4 @@ services:
 
 volumes:
   kafka-data:
+  db-data:

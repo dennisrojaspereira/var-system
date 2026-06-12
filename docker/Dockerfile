@@ -24,7 +24,8 @@ RUN pip install \
         "fastapi>=0.110" \
         "uvicorn[standard]>=0.29" \
         "pydantic>=2.6" \
-        "kafka-python>=2.0"
+        "kafka-python>=2.0" \
+        "psycopg[binary]>=3.2"
 
 # ML opcional (CPU). Pesado (~1GB+): so quando INSTALL_ML=true.
 RUN if [ "$INSTALL_ML" = "true" ]; then \

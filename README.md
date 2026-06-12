@@ -170,6 +170,21 @@ Os testes de regressao rodam automaticamente em dois pontos:
    suite com TimescaleDB real (o teste de integracao executa de verdade),
    smoke test da CLI e build da imagem Docker.
 
+## Seguranca (SAST + DAST)
+
+`.github/workflows/security.yml` roda a cada push/PR e semanalmente (pega CVEs
+novos mesmo sem commits). Tudo gratuito em repositorio publico:
+
+| Job         | Ferramenta            | Tipo                                  |
+| ----------- | --------------------- | ------------------------------------- |
+| `codeql`    | GitHub CodeQL         | SAST profundo (queries security-extended) |
+| `sast`      | Bandit + pip-audit    | SAST rapido + CVEs nas dependencias   |
+| `container` | Trivy                 | CVEs na imagem Docker                 |
+| `dast`      | OWASP ZAP baseline    | DAST contra a API rodando em CI       |
+
+Trivy e ZAP estao em modo report-only (nao bloqueiam o build); os resultados do
+CodeQL aparecem na aba **Security > Code scanning** do GitHub.
+
 ## Configuracao
 
 Tudo e controlado por `config.yaml`: cameras e fontes, parametros HLS, modelo

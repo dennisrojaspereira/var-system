@@ -94,7 +94,7 @@ def cmd_api(args) -> int:
     if getattr(args, "open", False):
         import threading
         import webbrowser
-        browse_host = "127.0.0.1" if host == "0.0.0.0" else host
+        browse_host = "127.0.0.1" if host == "0.0.0.0" else host  # nosec B104 - comparacao p/ URL do navegador, nao bind
         url = f"http://{browse_host}:{port}/viewer"
         threading.Timer(1.5, webbrowser.open, args=(url,)).start()
         print(f"Abrindo viewer em {url} ...")

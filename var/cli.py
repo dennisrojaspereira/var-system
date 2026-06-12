@@ -66,6 +66,10 @@ def cmd_analyze(args) -> int:
         with open(args.json, "w", encoding="utf-8") as fh:
             json.dump(result.to_dict(), fh, indent=2)
         print(f"\nResultado completo salvo em {args.json}")
+    if args.render:
+        from .vision.annotate import render_annotated
+        out = render_annotated(args.video, result, args.render)
+        print(f"Video anotado salvo em {out}")
     return 0
 
 
@@ -111,6 +115,7 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument("video")
     pa.add_argument("--step", type=int, default=3, help="processa 1 a cada N frames")
     pa.add_argument("--json", help="salva resultado completo em arquivo JSON")
+    pa.add_argument("--render", help="gera video anotado (caixas, trilha, contatos)")
     pa.set_defaults(func=cmd_analyze)
 
     ps = sub.add_parser("sync", help="alinha um instante entre dois angulos")

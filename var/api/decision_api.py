@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
 from ..buffer import TimelineBuffer
@@ -142,6 +143,30 @@ def create_app(config: Config | None = None, storage: Storage | None = None) -> 
         out["persisted_detections"] = persisted
         return out
 
+    @app.get("/videos")
+    def videos() -> list[dict[str, Any]]:
+        samples = Path(config.resolve("samples"))
+        if not samples.is_dir():
+            return []
+        return [
+            {"name": f.name, "url": f"/videos/{f.name}",
+             "size_kb": round(f.stat().st_size / 1024, 1)}
+            for f in sorted(samples.glob("*.mp4"))
+        ]
+
+    @app.get("/videos/{filename}")
+    def video_file(filename: str) -> FileResponse:
+        if "/" in filename or "\\" in filename or ".." in filename:
+            raise HTTPException(400, "Nome de arquivo invalido")
+        path = Path(config.resolve("samples")) / filename
+        if not path.is_file():
+            raise HTTPException(404, f"Video nao encontrado: {filename}")
+        return FileResponse(path, media_type="video/mp4")
+
+    @app.get("/viewer", response_class=HTMLResponse)
+    def viewer() -> str:
+        return _VIEWER_HTML
+
     @app.get("/trajectory/{camera_id}")
     def stored_trajectory(camera_id: str, t0: str, t1: str) -> dict[str, Any]:
         """Consulta a trajetoria persistida (t0/t1 em ISO-8601 UTC).
@@ -161,6 +186,71 @@ def create_app(config: Config | None = None, storage: Storage | None = None) -> 
         return {"match_id": match_id, "camera_id": camera_id, "points": points}
 
     return app
+
+
+_VIEWER_HTML = """<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<title>VAR Review Room</title>
+<style>
+  body { background:#0d1117; color:#e6edf3; font-family:Segoe UI,system-ui,sans-serif;
+         margin:0; padding:24px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  h1 span { color:#f0c000; }
+  .sub { color:#8b949e; font-size:13px; margin-bottom:20px; }
+  .wrap { display:flex; gap:24px; flex-wrap:wrap; }
+  video { max-width:760px; width:100%; background:#000; border-radius:8px;
+          border:1px solid #30363d; }
+  .panel { min-width:260px; flex:1; }
+  .item { padding:10px 12px; border:1px solid #30363d; border-radius:8px;
+          margin-bottom:8px; cursor:pointer; font-size:14px; }
+  .item:hover { background:#161b22; }
+  .item.active { border-color:#f0c000; background:#161b22; }
+  .size { color:#8b949e; font-size:12px; }
+  .legend { margin-top:16px; font-size:13px; color:#8b949e; line-height:1.8; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:2px;
+         margin-right:6px; }
+</style>
+</head>
+<body>
+<h1><span>&#9679;</span> VAR Review Room</h1>
+<div class="sub">Deteccao YOLOv8 &middot; tracking da bola &middot; contatos por mudanca de direcao</div>
+<div class="wrap">
+  <div><video id="player" controls autoplay loop muted></video></div>
+  <div class="panel">
+    <div id="list">carregando...</div>
+    <div class="legend">
+      <div><span class="dot" style="background:#ffd700"></span>caixa amarela: bola (YOLO "sports ball")</div>
+      <div><span class="dot" style="background:#00dcff"></span>caixa ciano: jogador</div>
+      <div><span class="dot" style="background:#78ff50"></span>trilha verde: trajetoria rastreada</div>
+      <div><span class="dot" style="background:#ff3c3c"></span>circulo vermelho: contato detectado</div>
+    </div>
+  </div>
+</div>
+<script>
+const player = document.getElementById('player');
+const list = document.getElementById('list');
+fetch('/videos').then(r => r.json()).then(videos => {
+  if (!videos.length) { list.textContent = 'nenhum video em samples/'; return; }
+  list.innerHTML = '';
+  videos.forEach((v, i) => {
+    const div = document.createElement('div');
+    div.className = 'item';
+    div.innerHTML = v.name + ' <span class="size">(' + v.size_kb + ' KB)</span>';
+    div.onclick = () => {
+      player.src = v.url;
+      document.querySelectorAll('.item').forEach(e => e.classList.remove('active'));
+      div.classList.add('active');
+    };
+    list.appendChild(div);
+    const preferred = v.name.includes('annotated') || v.name.includes('anotado');
+    if (i === 0 || preferred) div.onclick();
+  });
+});
+</script>
+</body>
+</html>"""
 
 
 def _persist_trajectory(config: Config, storage: Storage, sync: SyncManager,
